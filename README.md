@@ -49,4 +49,3 @@ chmod +x nixman.sh
 Your manifest is located at `~/.config/nixman/manifest.nix`. You can manually edit this file to group packages or add comments, then run `nixman update` to apply the changes.
 
 ---
-repos at once?**
