@@ -26,6 +26,7 @@ case "$1" in
         PKG=$2
         [[ -z "$PKG" ]] && echo "Usage: nixman install <pkg>" && exit 1
         
+        # Validation
         if ! nix-instantiate --eval -E "with import <nixpkgs> {}; $PKG" &>/dev/null; then
             echo "❌ Package '$PKG' not found in nixpkgs."
             exit 1
@@ -36,6 +37,7 @@ case "$1" in
             exit 0
         fi
 
+        # Append package before the closing bracket
         sed -i "$ s/]/  $PKG\n]/" "$MANIFEST"
         echo "➕ Added $PKG to manifest."
         sync_profile
@@ -50,33 +52,36 @@ case "$1" in
             exit 1
         fi
 
+        # Remove the exact line match
         sed -i "/^[[:space:]]*$PKG[[:space:]]*$/d" "$MANIFEST"
         echo "➖ Removed $PKG from manifest."
         sync_profile
+        ;;
+
+    "search"|"-Ss")
+        QUERY=$2
+        [[ -z "$QUERY" ]] && echo "Usage: nixman search <query>" && exit 1
+        echo "🔍 Searching nixpkgs for '$QUERY'..."
+        # Filters for attribute names and descriptions
+        nix-env -qaP ".*$QUERY.*" --description
         ;;
 
     "rollback")
         echo "⏳ Rolling back to the previous Nix generation..."
         if nix-env --rollback; then
             echo "✅ Profile rolled back."
-            echo "⚠️  Note: Your manifest.nix still contains the newer package list."
-            echo "   You may want to manually edit $MANIFEST to match the rollback."
+            echo "⚠️  Reminder: Update $MANIFEST manually if you want this change to be permanent."
         fi
         ;;
 
     "list"|"-Q")
         echo "📦 Current Manifested Packages:"
-        sed -n '/\[/,/\]/p' "$MANIFEST" | sed '1d;$d' | sed 's/^[[:space:]]*//'
+        # Grabs everything between the brackets, removes empty lines
+        sed -n '/\[/,/\]/p' "$MANIFEST" | sed '1d;$d' | sed 's/^[[:space:]]*//' | grep .
         ;;
 
     "history")
         nix-env --list-generations
-        ;;
-
-    "search"|"-Ss")
-        PKG=$2
-        [[ -z "$PKG" ]] && echo "Usage: nixman search <pkg>" && exit 1
-        nix-env -qaP ".*$PKG.*"
         ;;
 
     "update"|"upgrade"|"-Syu")
@@ -86,20 +91,20 @@ case "$1" in
         ;;
 
     "clean")
-        echo "🧹 Collecting garbage (removing old generations)..."
+        echo "🧹 Removing old generations and running garbage collector..."
         nix-collect-garbage -d
         ;;
 
     *)
         echo "NixMan - Vanilla Nix Declarative Wrapper"
         echo "Usage:"
-        echo "  nixman install <pkg>   (Add package)"
-        echo "  nixman remove <pkg>    (Remove package)"
-        echo "  nixman rollback        (Revert to previous generation)"
-        echo "  nixman history         (Show version history)"
-        echo "  nixman list            (List packages)"
-        echo "  nixman search <pkg>    (Search nixpkgs)"
-        echo "  nixman update          (Update channel and sync)"
-        echo "  nixman clean           (Delete old generations)"
+        echo "  nixman search <query>  (Find a package)"
+        echo "  nixman install <pkg>   (Add to manifest & sync)"
+        echo "  nixman remove <pkg>    (Remove from manifest & sync)"
+        echo "  nixman rollback        (Revert profile version)"
+        echo "  nixman history         (Show generations)"
+        echo "  nixman list            (View manifest)"
+        echo "  nixman update          (Refresh nixpkgs)"
+        echo "  nixman clean           (Free up disk space)"
         ;;
 esac
