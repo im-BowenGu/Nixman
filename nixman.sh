@@ -1,5 +1,5 @@
 #!/bin/bash
-# nixman - An imperlative wrapper for declarative nix.
+# nixman - A declarative wrapper for vanilla Nix profiles
 
 MANIFEST="$HOME/.config/nixman/manifest.nix"
 mkdir -p "$(dirname "$MANIFEST")"
@@ -26,19 +26,16 @@ case "$1" in
         PKG=$2
         [[ -z "$PKG" ]] && echo "Usage: nixman install <pkg>" && exit 1
         
-        # Check if package exists in nixpkgs
         if ! nix-instantiate --eval -E "with import <nixpkgs> {}; $PKG" &>/dev/null; then
             echo "❌ Package '$PKG' not found in nixpkgs."
             exit 1
         fi
 
-        # Check if already in manifest
         if grep -qw "$PKG" "$MANIFEST"; then
             echo "ℹ️ '$PKG' is already in the manifest."
             exit 0
         fi
 
-        # Append package before the closing bracket
         sed -i "$ s/]/  $PKG\n]/" "$MANIFEST"
         echo "➕ Added $PKG to manifest."
         sync_profile
@@ -53,15 +50,27 @@ case "$1" in
             exit 1
         fi
 
-        # Remove the line containing the package
         sed -i "/^[[:space:]]*$PKG[[:space:]]*$/d" "$MANIFEST"
         echo "➖ Removed $PKG from manifest."
         sync_profile
         ;;
 
+    "rollback")
+        echo "⏳ Rolling back to the previous Nix generation..."
+        if nix-env --rollback; then
+            echo "✅ Profile rolled back."
+            echo "⚠️  Note: Your manifest.nix still contains the newer package list."
+            echo "   You may want to manually edit $MANIFEST to match the rollback."
+        fi
+        ;;
+
     "list"|"-Q")
         echo "📦 Current Manifested Packages:"
         sed -n '/\[/,/\]/p' "$MANIFEST" | sed '1d;$d' | sed 's/^[[:space:]]*//'
+        ;;
+
+    "history")
+        nix-env --list-generations
         ;;
 
     "search"|"-Ss")
@@ -86,6 +95,8 @@ case "$1" in
         echo "Usage:"
         echo "  nixman install <pkg>   (Add package)"
         echo "  nixman remove <pkg>    (Remove package)"
+        echo "  nixman rollback        (Revert to previous generation)"
+        echo "  nixman history         (Show version history)"
         echo "  nixman list            (List packages)"
         echo "  nixman search <pkg>    (Search nixpkgs)"
         echo "  nixman update          (Update channel and sync)"
