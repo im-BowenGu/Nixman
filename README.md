@@ -49,12 +49,4 @@ chmod +x nixman.sh
 Your manifest is located at `~/.config/nixman/manifest.nix`. You can manually edit this file to group packages or add comments, then run `nixman update` to apply the changes.
 
 ---
-
-### Final Project Separation
-
-Since you mentioned these are separate projects, you can now push them to their respective repos:
-
-1. **ArchABRoot:** Contains `abroot.sh`, `setup_config.sh`, and its README.
-2. **NixMan:** Contains `nixman.sh` and its README.
-
-**Would you like me to help you set up a simple shell alias that combines `pacman` and `nixman` searches so you can find packages in both repos at once?**
+repos at once?**
