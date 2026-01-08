@@ -1,51 +1,61 @@
 # NixMan
 
-**NixMan** is a lightweight, declarative wrapper for the Nix package manager. It brings the predictability of NixOS configuration to any Linux distribution (like Arch) without the complexity of Home Manager.
+**NixMan** is a declarative CLI wrapper for the Nix package manager. It is designed for users who want the power of a reproducible package manifest without the overhead of Home Manager or NixOS.
 
-## 💡 Why use NixMan?
+## 🌟 Key Features
 
-Standard `nix-env -i` commands are imperative—they change your system state but leave no record of why. NixMan maintains a **Manifest File** (`~/.config/nixman/manifest.nix`). Every time you add or remove a package, NixMan updates the manifest and synchronizes your profile.
-
-## 🛠 Features
-
-* **Declarative:** Your package list is stored in a single readable file.
-* **Atomic Sync:** If a sync fails, your profile remains in its previous working state.
-* **Rollbacks:** Instantly jump back to a previous "generation" of your environment.
-* **Clean:** Easily remove old versions and unreferenced packages with the `clean` command.
+* **Search Integration:** Instantly look up package attribute names and descriptions.
+* **Declarative Manifest:** Your environment is defined by a single file (`~/.config/nixman/manifest.nix`).
+* **Generation Tracking:** View the history of your environment and roll back to any previous state.
+* **Garbage Collection:** Keep your `/nix/store` lean with built-in cleaning commands.
 
 ## 🚀 Installation
 
-1. Ensure `nix` is installed on your system.
+1. Install Nix (Vanilla) on your system.
 2. Clone this repo:
 ```bash
 git clone https://github.com/im-BowenGu/Nixman.git
 cd Nixman
 ```
-3. Install it.
+4. Install and make executable:
 ```bash
 sudo cp nixman.sh /usr/local/bin/nixman
-```   
-5. make it executable:
-```bash
-chmod +x nixman.sh
+sudo chmod +x /usr/local/bin/nixman
+
 ```
 
 
 
-## ⌨️ Command Guide
+## ⌨️ Common Commands
 
-| Command | Description |
+| Command | Action |
 | --- | --- |
-| `nixman install <pkg>` | Adds a package to your manifest and syncs. |
-| `nixman remove <pkg>` | Removes a package from your manifest and syncs. |
-| `nixman rollback` | Reverts the current profile to the previous working state. |
-| `nixman list` | Lists all packages currently defined in your manifest. |
-| `nixman history` | Shows all previous versions (generations) of your environment. |
-| `nixman update` | Pulls latest package definitions and refreshes your apps. |
-| `nixman clean` | Deletes old generations to save disk space. |
+| `nixman search <query>` | Searches nixpkgs for matching names/descriptions. |
+| `nixman install <pkg>` | Adds a package to your manifest and triggers a sync. |
+| `nixman remove <pkg>` | Deletes a package from the manifest and triggers a sync. |
+| `nixman list` | Displays all packages currently in your manifest. |
+| `nixman rollback` | Reverts the current user profile to the previous generation. |
+| `nixman update` | Updates the nixpkgs channel and syncs the profile. |
 
-## 📂 The Manifest
+---
 
-Your manifest is located at `~/.config/nixman/manifest.nix`. You can manually edit this file to group packages or add comments, then run `nixman update` to apply the changes.
+## 📂 Customizing the Manifest
+
+You can find your manifest at `~/.config/nixman/manifest.nix`. Because this is a standard Nix file, you can organize your packages with comments:
+
+```nixos
+with import <nixpkgs> {}; [
+  # Development
+  neovim
+  git
+  
+  # Communication
+  discord
+  slack
+]
+
+```
+
+After manually editing, simply run `nixman sync` (or `nixman update`) to apply changes.
 
 ---
