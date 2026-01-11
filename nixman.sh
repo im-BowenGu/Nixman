@@ -14,36 +14,45 @@ fi
 sync_profile() {
     echo "🔄 Syncing Nix profile to manifest..."
     
-    # We wrap the manifest list in a buildEnv. This creates a single managed 
-    # environment package. This is necessary to emulate 'nix-env -irf' (replace) 
-    # behavior using 'nix profile', so that removed packages are actually cleaned up.
+    # 1. Build the environment first to ensure it is valid.
+    # We build into a temporary symlink. This separates the build step from the install step,
+    # ensuring we don't break the profile if the download/build fails.
+    BUILD_LINK="/tmp/nixman-build-$(date +%s)"
     EXPR="with import <nixpkgs> {}; buildEnv { name = \"nixman-env\"; paths = import $MANIFEST; }"
 
-    # Install the combined environment as a new generation
-    if nix profile install --impure --expr "$EXPR"; then
+    # We use 'nix build' (impure) to realize the derivation
+    if nix build --impure --expr "$EXPR" --out-link "$BUILD_LINK"; then
         
-        # CLEANUP: Remove older versions of 'nixman-env' to prevent duplication 
-        # in the profile list (active duplicate entries).
+        # 2. Find existing versions of nixman-env in the profile.
+        # We grep for the specific store path format associated with our buildEnv name.
+        # This is more robust than parsing column numbers which vary by Nix version.
+        # Regex looks for: /nix/store/<hash>-nixman-env
+        OLD_PATHS=$(nix profile list | grep -Eo '/nix/store/[a-z0-9]+-nixman-env')
         
-        # 1. List profile, filter for our env name, get column 1 (Index)
-        INDICES=$(nix profile list | grep "nixman-env" | awk '{print $1}')
-        
-        # 2. Count active entries
-        COUNT=$(echo "$INDICES" | wc -w)
-        
-        if [ "$COUNT" -gt 1 ]; then
-            # 3. Sort indices numerically and remove the last one (the one we just installed)
-            TO_REMOVE=$(echo "$INDICES" | sort -n | head -n -1)
-            
-            # 4. Remove the old indices
-            # We use xargs to pass the list of indices to remove
-            echo "$TO_REMOVE" | xargs nix profile remove
-            echo "🧹 Removed previous profile generation to maintain state."
+        # 3. Remove old versions to prevent file conflicts during install.
+        if [[ -n "$OLD_PATHS" ]]; then
+            # We iterate over paths and remove them. 
+            # We suppress errors (2>/dev/null) in case a path was listed but is already in a weird state.
+            echo "$OLD_PATHS" | while read -r path; do
+                if [[ -n "$path" ]]; then
+                    nix profile remove "$path" 2>/dev/null || true
+                fi
+            done
+        fi
+
+        # 4. Install the new build.
+        # We install the store path directly.
+        if nix profile install "$BUILD_LINK"; then
+            echo "✅ Sync complete."
+        else
+            echo "❌ Profile install failed."
+            exit 1
         fi
         
-        echo "✅ Sync complete."
+        # Cleanup the temporary link
+        rm -f "$BUILD_LINK"
     else
-        echo "❌ Sync failed. Check your manifest for syntax errors."
+        echo "❌ Build failed. Check your manifest for syntax errors or invalid package names."
         exit 1
     fi
 }
@@ -89,8 +98,7 @@ case "$1" in
         QUERY=$2
         [[ -z "$QUERY" ]] && echo "Usage: nixman search <query>" && exit 1
         echo "🔍 Searching nixpkgs for '$QUERY'..."
-        # Uses the new 'nix search' command. 
-        # Note: This searches the nixpkgs registry.
+        # Modern replacement for nix-env -qaP
         nix search nixpkgs "$QUERY"
         ;;
 
@@ -120,7 +128,6 @@ case "$1" in
 
     "clean")
         echo "🧹 Removing old generations and running garbage collector..."
-        # 'nix store gc' is the modern replacement
         nix store gc
         ;;
 
