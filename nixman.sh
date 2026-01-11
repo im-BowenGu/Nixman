@@ -1,5 +1,5 @@
 #!/bin/bash
-# nixman - A declarative wrapper for vanilla Nix profiles
+# nixman - A declarative wrapper for vanilla Nix profiles (Updated for Nix 2.0+ CLI)
 
 MANIFEST="$HOME/.config/nixman/manifest.nix"
 mkdir -p "$(dirname "$MANIFEST")"
@@ -13,7 +13,34 @@ fi
 # Function to sync the profile to the manifest
 sync_profile() {
     echo "🔄 Syncing Nix profile to manifest..."
-    if nix-env -irf "$MANIFEST"; then
+    
+    # We wrap the manifest list in a buildEnv. This creates a single managed 
+    # environment package. This is necessary to emulate 'nix-env -irf' (replace) 
+    # behavior using 'nix profile', so that removed packages are actually cleaned up.
+    EXPR="with import <nixpkgs> {}; buildEnv { name = \"nixman-env\"; paths = import $MANIFEST; }"
+
+    # Install the combined environment as a new generation
+    if nix profile install --impure --expr "$EXPR"; then
+        
+        # CLEANUP: Remove older versions of 'nixman-env' to prevent duplication 
+        # in the profile list (active duplicate entries).
+        
+        # 1. List profile, filter for our env name, get column 1 (Index)
+        INDICES=$(nix profile list | grep "nixman-env" | awk '{print $1}')
+        
+        # 2. Count active entries
+        COUNT=$(echo "$INDICES" | wc -w)
+        
+        if [ "$COUNT" -gt 1 ]; then
+            # 3. Sort indices numerically and remove the last one (the one we just installed)
+            TO_REMOVE=$(echo "$INDICES" | sort -n | head -n -1)
+            
+            # 4. Remove the old indices
+            # We use xargs to pass the list of indices to remove
+            echo "$TO_REMOVE" | xargs nix profile remove
+            echo "🧹 Removed previous profile generation to maintain state."
+        fi
+        
         echo "✅ Sync complete."
     else
         echo "❌ Sync failed. Check your manifest for syntax errors."
@@ -26,8 +53,8 @@ case "$1" in
         PKG=$2
         [[ -z "$PKG" ]] && echo "Usage: nixman install <pkg>" && exit 1
         
-        # Validation
-        if ! nix-instantiate --eval -E "with import <nixpkgs> {}; $PKG" &>/dev/null; then
+        # Validation using modern 'nix eval'
+        if ! nix eval --impure --expr "with import <nixpkgs> {}; $PKG" &>/dev/null; then
             echo "❌ Package '$PKG' not found in nixpkgs."
             exit 1
         fi
@@ -62,13 +89,14 @@ case "$1" in
         QUERY=$2
         [[ -z "$QUERY" ]] && echo "Usage: nixman search <query>" && exit 1
         echo "🔍 Searching nixpkgs for '$QUERY'..."
-        # Filters for attribute names and descriptions
-        nix-env -qaP ".*$QUERY.*" --description
+        # Uses the new 'nix search' command. 
+        # Note: This searches the nixpkgs registry.
+        nix search nixpkgs "$QUERY"
         ;;
 
     "rollback")
         echo "⏳ Rolling back to the previous Nix generation..."
-        if nix-env --rollback; then
+        if nix profile rollback; then
             echo "✅ Profile rolled back."
             echo "⚠️  Reminder: Update $MANIFEST manually if you want this change to be permanent."
         fi
@@ -81,7 +109,7 @@ case "$1" in
         ;;
 
     "history")
-        nix-env --list-generations
+        nix profile history
         ;;
 
     "update"|"upgrade"|"-Syu")
@@ -92,11 +120,12 @@ case "$1" in
 
     "clean")
         echo "🧹 Removing old generations and running garbage collector..."
-        nix-collect-garbage -d
+        # 'nix store gc' is the modern replacement
+        nix store gc
         ;;
 
     *)
-        echo "NixMan - Vanilla Nix Declarative Wrapper"
+        echo "NixMan - Vanilla Nix Declarative Wrapper (Modern CLI)"
         echo "Usage:"
         echo "  nixman search <query>  (Find a package)"
         echo "  nixman install <pkg>   (Add to manifest & sync)"
